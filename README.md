@@ -101,6 +101,7 @@ pip install -r requirements.txt
 ### 3. Run the Backend Server
 Start the Flask application:
 ```bash
+/RAG/venv/Scripts/Activate.ps1
 python app.py
 ```
 
