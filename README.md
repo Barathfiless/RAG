@@ -1,10 +1,10 @@
-# AI PDF Assistant :book::robot:
+# AI PDF Assistant
 
 A completely local, highly accurate Retrieval-Augmented Generation (RAG) assistant for querying PDF documents. This application processes your PDFs entirely offline, preserving the formatting, layout, extracting images, and building an interactive learning environment directly on your machine.
 
 ---
 
-## 🌟 Key Features
+##  Key Features
 
 * **"God-Mode" Accuracy:** Stitches context chunks together to return verbatim, paragraph-perfect extractions exactly as they appear in the source PDF.
 * **Smart Image Extraction:** Pulls images, figures, and charts from the PDF natively.
@@ -18,7 +18,7 @@ A completely local, highly accurate Retrieval-Augmented Generation (RAG) assista
 
 ---
 
-## 🛠️ Tech Stack & Dependencies
+##  Tech Stack & Dependencies
 
 ### What is installed, and why?
 
@@ -54,7 +54,7 @@ A completely local, highly accurate Retrieval-Augmented Generation (RAG) assista
 
 ---
 
-## 🧠 How It Works Under The Hood
+##  How It Works Under The Hood
 
 ### 1. Document Ingestion & Image Processing
 When you upload a PDF:
@@ -78,7 +78,7 @@ When you click the microphone icon:
 
 ---
 
-## 🚀 Getting Started
+##  Getting Started
 
 ### Prerequisites
 You will need Python 3.10+ installed.
