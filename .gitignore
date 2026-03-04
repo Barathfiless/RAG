@@ -1,0 +1,10 @@
+venv/
+__pycache__/
+*.pyc
+.env
+uploads/
+*.sqlite3
+.DS_Store
+*.pdf
+static/uploaded_images/
+static/extracted_images/

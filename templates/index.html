@@ -1,0 +1,1092 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="AI PDF Assistant — Local RAG powered by FAISS and PyMuPDF">
+    <title>AI PDF Assistant</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='features.css') }}">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:ital,wght@0,400;0,500;0,600;0,700;1,400&display=swap"
+        rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.7.0/styles/github-dark.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.7.0/highlight.min.js"></script>
+</head>
+
+<body data-theme="dark">
+
+    <!-- ═══ Sidebar ══════════════════════════════════════════════════════════════ -->
+    <div class="sidebar" id="sidebar">
+        <div class="sidebar-top">
+            <button class="new-chat-btn" id="newChatBtn">
+                <svg style="width:16px;height:16px;fill:currentColor" viewBox="0 0 24 24">
+                    <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z" />
+                </svg>
+                <span>New Chat</span>
+            </button>
+        </div>
+
+        <div class="history-section-label">Recents</div>
+        <div class="history-list" id="historyList">
+            {% for session in history %}
+            <div class="history-item" id="session-{{ session.id }}" data-id="{{ session.id }}"
+                data-title="{{ session.title | e }}">
+                <svg style="width:13px;height:13px;opacity:0.5;flex-shrink:0" viewBox="0 0 24 24">
+                    <path
+                        d="M14 2H6c-1.1 0-1.99.9-1.99 2L4 20c0 1.1.89 2 1.99 2H18c1.1 0 2-.9 2-2V8l-6-6zm2 16H8v-2h8v2zm0-4H8v-2h8v2zm-3-5V3.5L18.5 9H13z" />
+                </svg>
+                <span class="history-title" title="{{ session.title }}">{{ session.title }}</span>
+                <div class="history-actions">
+                    <button class="icon-btn rename-btn" data-session-id="{{ session.id }}" title="Rename">
+                        <svg style="width:12px;height:12px;fill:currentColor" viewBox="0 0 24 24">
+                            <path
+                                d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a1 1 0 0 0 0-1.41l-2.34-2.34a1 1 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z" />
+                        </svg>
+                    </button>
+                    <button class="icon-btn delete-btn" data-session-id="{{ session.id }}" title="Delete">
+                        <svg style="width:12px;height:12px;fill:currentColor" viewBox="0 0 24 24">
+                            <path d="M19 4h-3.5l-1-1h-5l-1 1H5v2h14V4zM6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12z" />
+                        </svg>
+                    </button>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+
+        <div class="sidebar-footer">
+            <button class="theme-btn" id="themeToggleBtn">
+                <svg id="themeIcon" style="width:15px;height:15px;fill:currentColor" viewBox="0 0 24 24">
+                    <path
+                        d="M12 3c-4.97 0-9 4.03-9 9s4.03 9 9 9 9-4.03 9-9c0-.46-.04-.92-.1-1.36-.98 1.37-2.58 2.26-4.4 2.26-2.98 0-5.4-2.42-5.4-5.4 0-1.81.89-3.42 2.26-4.4-.44-.06-.9-.1-1.36-.1z" />
+                </svg>
+                <span>Toggle Theme</span>
+            </button>
+        </div>
+    </div>
+
+    <!-- ═══ Main Content ═══════════════════════════════════════════════════════════ -->
+    <div class="main-content">
+        <header>
+            <button class="sidebar-toggle" id="sidebarToggle" title="Toggle sidebar">
+                <svg style="width:18px;height:18px;fill:currentColor" viewBox="0 0 24 24">
+                    <path d="M3 18h18v-2H3v2zm0-5h18v-2H3v2zm0-7v2h18V6H3z" />
+                </svg>
+            </button>
+
+            <div class="header-title">
+                <span class="header-app-name">AI PDF Assistant</span>
+                <span id="activeFileDisplay" class="header-file"></span>
+            </div>
+
+            <div class="header-actions" id="headerActions" style="display:none">
+                <button class="header-btn" id="quizBtn" title="Quiz Me on this PDF">
+                    <svg style="width:15px;height:15px;fill:currentColor" viewBox="0 0 24 24">
+                        <path
+                            d="M11 18h2v-2h-2v2zm1-16C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm0-14c-2.21 0-4 1.79-4 4h2c0-1.1.9-2 2-2s2 .9 2 2c0 2-3 1.75-3 5h2c0-2.25 3-2.5 3-5 0-2.21-1.79-4-4-4z" />
+                    </svg>
+                    Quiz Me
+                </button>
+                <button class="header-btn" id="outlineBtn" title="Document Outline">
+                    <svg style="width:15px;height:15px;fill:currentColor" viewBox="0 0 24 24">
+                        <path
+                            d="M3 9h14V7H3v2zm0 4h14v-2H3v2zm0 4h14v-2H3v2zm16 0h2v-2h-2v2zm0-10v2h2V7h-2zm0 6h2v-2h-2v2z" />
+                    </svg>
+                    Outline
+                </button>
+                <button class="header-btn" id="glossaryBtn" title="Auto-generated Glossary">
+                    <svg style="width:15px;height:15px;fill:currentColor" viewBox="0 0 24 24">
+                        <path
+                            d="M21 5c-1.11-.35-2.33-.5-3.5-.5-1.95 0-4.05.4-5.5 1.5-1.45-1.1-3.55-1.5-5.5-1.5S2.45 4.9 1 6v14.65c0 .25.25.5.5.5.1 0 .15-.05.25-.05C3.1 20.45 5.05 20 6.5 20c1.95 0 4.05.4 5.5 1.5 1.35-.85 3.8-1.5 5.5-1.5 1.65 0 3.35.3 4.75 1.05.1.05.15.05.25.05.25 0 .5-.25.5-.5V6c-.6-.45-1.25-.75-2-1zm0 13.5c-1.1-.35-2.3-.5-3.5-.5-1.7 0-4.15.65-5.5 1.5V8c1.35-.85 3.8-1.5 5.5-1.5 1.2 0 2.4.15 3.5.5v11.5z" />
+                    </svg>
+                    Glossary
+                </button>
+                <button class="header-btn" id="exportBtn" title="Export chat">
+                    <svg style="width:15px;height:15px;fill:currentColor" viewBox="0 0 24 24">
+                        <path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z" />
+                    </svg>
+                    Export
+                </button>
+            </div>
+        </header>
+
+        <!-- ═══ Quiz Modal ════════════════════════════════════════════════════════════ -->
+        <div class="feature-overlay" id="quizOverlay">
+            <div class="feature-panel">
+                <div class="feature-header">
+                    <h2>🧠 Quiz Mode</h2>
+                    <p>Test your understanding of the document</p>
+                    <button class="feature-close" id="quizClose">&times;</button>
+                </div>
+                <div class="feature-body" id="quizBody">
+                    <div class="feature-loading">Generating questions...</div>
+                </div>
+                <div class="feature-footer">
+                    <button class="feature-action-btn" id="quizNewBtn">New Quiz</button>
+                    <span id="quizScore" class="quiz-score"></span>
+                </div>
+            </div>
+        </div>
+
+        <!-- ═══ Outline Modal ════════════════════════════════════════════════════════ -->
+        <div class="feature-overlay" id="outlineOverlay">
+            <div class="feature-panel">
+                <div class="feature-header">
+                    <h2>📋 Document Outline</h2>
+                    <p>Auto-detected structure and sections</p>
+                    <button class="feature-close" id="outlineClose">&times;</button>
+                </div>
+                <div class="feature-body" id="outlineBody">
+                    <div class="feature-loading">Building outline...</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ═══ Glossary Modal ═══════════════════════════════════════════════════════ -->
+        <div class="feature-overlay" id="glossaryOverlay">
+            <div class="feature-panel">
+                <div class="feature-header">
+                    <h2>📖 Auto Glossary</h2>
+                    <p>Key terms and definitions extracted from the PDF</p>
+                    <button class="feature-close" id="glossaryClose">&times;</button>
+                </div>
+                <div class="feature-body" id="glossaryBody">
+                    <div class="feature-loading">Extracting definitions...</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Empty state -->
+        <div class="empty-state" id="emptyState">
+            <div class="empty-icon">
+                <svg viewBox="0 0 24 24" style="width:48px;height:48px;fill:currentColor;opacity:0.3">
+                    <path
+                        d="M20 2H8c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-2 5h-3v5.5c0 1.38-1.12 2.5-2.5 2.5S10 13.88 10 12.5 11.12 10 12.5 10c.57 0 1.08.19 1.5.51V5h4v2zM4 6H2v14c0 1.1.9 2 2 2h14v-2H4V6z" />
+                </svg>
+            </div>
+            <h2 class="empty-title">Your AI PDF Assistant</h2>
+            <p class="empty-desc">Upload a PDF to start asking questions. The AI will read, index and understand it —
+                entirely on your local machine.</p>
+            <button class="empty-upload-btn" id="emptyUploadBtn">
+                <svg style="width:18px;height:18px;fill:currentColor" viewBox="0 0 24 24">
+                    <path
+                        d="M14 2H6c-1.1 0-1.99.9-1.99 2L4 20c0 1.1.89 2 1.99 2H18c1.1 0 2-.9 2-2V8l-6-6zm2 16H8v-2h8v2zm0-4H8v-2h8v2zm-3-5V3.5L18.5 9H13z" />
+                </svg>
+                Upload a PDF
+            </button>
+        </div>
+
+        <!-- Chat container -->
+        <div class="chat-container" id="chatContainer" style="display:none"></div>
+
+        <!-- Suggestions row -->
+        <div class="suggestions-row" id="suggestionsRow" style="display:none">
+            <div class="suggestions-header" id="suggestionsHeader">
+                <span class="suggestions-label">Suggested Questions</span>
+                <button class="suggestions-toggle" id="suggestionsToggle" title="Collapse suggestions"
+                    aria-expanded="true">
+                    <svg id="suggToggleIcon" viewBox="0 0 24 24"
+                        style="width:14px;height:14px;fill:currentColor;transition:transform 0.22s ease">
+                        <path d="M7.41 8.59L12 13.17l4.59-4.58L18 10l-6 6-6-6z" />
+                    </svg>
+                </button>
+            </div>
+            <div class="suggestions-chips" id="suggestionsChips"></div>
+        </div>
+
+        <!-- Input area -->
+        <div class="input-container">
+            <!-- Image preview strip (shown when image is attached) -->
+            <div class="image-preview-strip" id="imagePreviewStrip" style="display:none">
+                <div class="image-preview-thumb" id="imagePreviewThumb">
+                    <img id="imagePreviewImg" src="" alt="Attached image">
+                    <button class="image-remove-btn" id="imageRemoveBtn" title="Remove image">
+                        <svg viewBox="0 0 24 24" style="width:12px;height:12px;fill:currentColor">
+                            <path
+                                d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z" />
+                        </svg>
+                    </button>
+                </div>
+                <span class="image-preview-label">Image attached — ask a question about it</span>
+            </div>
+
+            <div class="input-wrapper">
+                <input type="file" id="pdfFile" accept="application/pdf" style="display:none">
+                <input type="file" id="imageFile" accept="image/*" style="display:none">
+
+                <!-- PDF upload -->
+                <button class="upload-chat-btn" id="uploadBtn" title="Upload PDF">
+                    <svg style="width:18px;height:18px;fill:currentColor" viewBox="0 0 24 24">
+                        <path
+                            d="M14 2H6c-1.1 0-1.99.9-1.99 2L4 20c0 1.1.89 2 1.99 2H18c1.1 0 2-.9 2-2V8l-6-6zm4 18H6v-2h12v2zm0-4H6v-2h12v2zm-3-5V3.5L18.5 9H15z" />
+                    </svg>
+                </button>
+
+                <!-- Image upload -->
+                <button class="upload-chat-btn" id="imageUploadBtn" title="Attach an image">
+                    <svg style="width:18px;height:18px;fill:currentColor" viewBox="0 0 24 24">
+                        <path
+                            d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z" />
+                    </svg>
+                </button>
+
+                <textarea id="userInput" placeholder="Ask anything about your PDF..." rows="1"></textarea>
+
+                <!-- Mic button -->
+                <button class="mic-btn" id="micBtn" title="Voice input">
+                    <svg id="micIcon" viewBox="0 0 24 24" style="width:17px;height:17px;fill:currentColor">
+                        <path
+                            d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm-1 1.93c-3.94-.49-7-3.85-7-7.93H2c0 4.42 2.72 8.21 7 9.44V21h2v-3.07c.33.05.66.07 1 .07s.67-.02 1-.07V21h2v-3.63c4.28-1.23 7-5.02 7-9.44h-2c0 4.08-3.06 7.44-7 7.93V15.93z" />
+                    </svg>
+                </button>
+
+                <!-- Send -->
+                <button class="send-btn" id="sendBtn" disabled title="Send">
+                    <svg viewBox="0 0 24 24" style="width:16px;height:16px;fill:currentColor">
+                        <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z" />
+                    </svg>
+                </button>
+            </div>
+            <div class="footer-text">Runs 100% locally · FAISS + PyMuPDF · No data leaves your machine</div>
+        </div>
+    </div>
+
+    <!-- ═══ Upload Status Overlay ════════════════════════════════════════════════ -->
+    <div class="status-overlay" id="statusOverlay">
+        <div class="status-card">
+            <div class="status-spinner" id="statusSpinner"></div>
+            <div class="status-success-icon" id="statusSuccessIcon">
+                <svg style="width:32px;height:32px;fill:#10a37f" viewBox="0 0 24 24">
+                    <path
+                        d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z" />
+                </svg>
+            </div>
+            <div class="status-text" id="statusText">Uploading...</div>
+            <div class="status-sub" id="statusSub"></div>
+            <div class="status-progress" id="statusProgress">
+                <div class="status-progress-bar" id="statusProgressBar"></div>
+            </div>
+            <div class="status-progress-text" id="statusProgressText"></div>
+        </div>
+    </div>
+
+    <!-- ═══ Delete Confirmation Modal ════════════════════════════════════════════ -->
+    <div class="confirm-overlay" id="confirmOverlay">
+        <div class="confirm-card">
+            <div class="confirm-icon">
+                <svg viewBox="0 0 24 24" style="width:24px;height:24px;fill:currentColor">
+                    <path d="M19 4h-3.5l-1-1h-5l-1 1H5v2h14V4zM6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12z" />
+                </svg>
+            </div>
+            <div class="confirm-body">
+                <h3 class="confirm-title">Delete Chat?</h3>
+                <p class="confirm-desc">This chat and all messages will be permanently removed.</p>
+            </div>
+            <div class="confirm-actions">
+                <button class="confirm-cancel" id="confirmCancel">Cancel</button>
+                <button class="confirm-delete" id="confirmOk">Delete</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ═══ Rename Modal ════════════════════════════════════════════════════════ -->
+    <div class="confirm-overlay" id="renameOverlay">
+        <div class="confirm-card" style="gap:20px">
+            <div class="confirm-body">
+                <h3 class="confirm-title">Rename Chat</h3>
+                <input type="text" id="renameInput" class="rename-input" placeholder="New name...">
+            </div>
+            <div class="confirm-actions">
+                <button class="confirm-cancel" id="renameCancel">Cancel</button>
+                <button class="confirm-delete" id="renameOk" style="background:var(--accent)">Rename</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ═══ Toast ════════════════════════════════════════════════════════════════ -->
+    <div class="toast" id="toast"></div>
+
+    <script>
+        // ─── State ────────────────────────────────────────────────────────────────
+        let currentSessionId = null;
+        window.currentSessionId = null; // expose to features.js
+        let isStreaming = false;
+        let abortController = null;
+        let stopTyping = false;
+        let uploadProgressInterval = null;
+        let uploadProgressValue = 0;
+
+        const SEND_ICON = `<svg viewBox="0 0 24 24" style="width:16px;height:16px;fill:currentColor"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z" /></svg>`;
+        const STOP_ICON = `<svg viewBox="0 0 24 24" style="width:16px;height:16px;fill:currentColor"><path d="M6 6h12v12H6z" /></svg>`;
+
+        // ─── Elements ─────────────────────────────────────────────────────────────
+        const chatContainer = document.getElementById('chatContainer');
+        const emptyState = document.getElementById('emptyState');
+        const userInput = document.getElementById('userInput');
+        const sendBtn = document.getElementById('sendBtn');
+        const pdfFile = document.getElementById('pdfFile');
+        const activeFile = document.getElementById('activeFileDisplay');
+        const historyList = document.getElementById('historyList');
+        const suggestionsRow = document.getElementById('suggestionsRow');
+        const suggestionsChips = document.getElementById('suggestionsChips');
+        const headerActions = document.getElementById('headerActions');
+
+        // ─── UI Helpers ───────────────────────────────────────────────────────────
+        function toggleUI(streaming) {
+            isStreaming = streaming;
+            const uploadBtns = [document.getElementById('uploadBtn'), document.getElementById('imageUploadBtn'), document.getElementById('emptyUploadBtn')];
+            uploadBtns.forEach(btn => { if (btn) btn.disabled = streaming; });
+
+            userInput.disabled = streaming;
+            userInput.placeholder = streaming ? "AI is thinking..." : "Ask anything about your PDF...";
+
+            sendBtn.innerHTML = streaming ? STOP_ICON : SEND_ICON;
+            sendBtn.classList.toggle('stop-mode', streaming);
+            sendBtn.title = streaming ? 'Stop generating' : 'Send';
+
+            if (!streaming) {
+                sendBtn.disabled = !userInput.value.trim() && !attachedImageFile;
+                setTimeout(() => userInput.focus(), 10);
+            } else {
+                sendBtn.disabled = false;
+            }
+        }
+
+        function stopGeneration() {
+            if (abortController) abortController.abort();
+            stopTyping = true;
+            toggleUI(false);
+            showToast('Generation stopped.', 'info');
+        }
+
+        // ─── Theme ────────────────────────────────────────────────────────────────
+        document.body.dataset.theme = localStorage.getItem('theme') || 'dark';
+        document.getElementById('themeToggleBtn').onclick = () => {
+            const next = document.body.dataset.theme === 'dark' ? 'light' : 'dark';
+            document.body.dataset.theme = next;
+            localStorage.setItem('theme', next);
+        };
+
+        // ─── Sidebar ──────────────────────────────────────────────────────────────
+        document.getElementById('sidebarToggle').onclick = () =>
+            document.getElementById('sidebar').classList.toggle('collapsed');
+
+        // ─── Input auto-resize & send button ─────────────────────────────────────
+        userInput.addEventListener('input', () => {
+            userInput.style.height = 'auto';
+            userInput.style.height = Math.min(userInput.scrollHeight, 160) + 'px';
+            if (!isStreaming) sendBtn.disabled = !userInput.value.trim() && !attachedImageFile;
+        });
+
+        userInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); smartSend(); }
+        });
+
+        sendBtn.addEventListener('click', smartSend);
+
+        // ─── Upload ───────────────────────────────────────────────────────────────
+        const triggerPDFUpload = () => {
+            if (!isStreaming) setTimeout(() => pdfFile.click(), 5);
+        };
+        document.getElementById('uploadBtn').onclick = triggerPDFUpload;
+        document.getElementById('emptyUploadBtn').onclick = triggerPDFUpload;
+        pdfFile.addEventListener('change', uploadPDF);
+
+        // ─── New Chat ─────────────────────────────────────────────────────────────
+        document.getElementById('newChatBtn').onclick = newChat;
+
+        // ─── Export ───────────────────────────────────────────────────────────────
+        document.getElementById('exportBtn').onclick = () => {
+            if (currentSessionId) window.open(`/export/${currentSessionId}`, '_blank');
+        };
+
+        // ─── Voice Input (Web Speech API) ─────────────────────────────────────────
+        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+        let recognition = null;
+        let isRecording = false;
+        const micBtn = document.getElementById('micBtn');
+
+        if (SpeechRecognition) {
+            recognition = new SpeechRecognition();
+            recognition.continuous = false;
+            recognition.interimResults = true;
+            recognition.lang = 'en-US';
+
+            recognition.onresult = (e) => {
+                const transcript = Array.from(e.results).map(r => r[0].transcript).join('');
+                userInput.value = transcript;
+                userInput.dispatchEvent(new Event('input'));
+            };
+
+            recognition.onend = () => {
+                isRecording = false;
+                micBtn.classList.remove('recording');
+                micBtn.title = 'Voice input';
+            };
+
+            recognition.onerror = (e) => {
+                isRecording = false;
+                micBtn.classList.remove('recording');
+                if (e.error !== 'no-speech') showToast('Mic error: ' + e.error, 'error');
+            };
+        }
+
+        micBtn.onclick = () => {
+            if (isStreaming) return;
+            if (!recognition) {
+                showToast('Voice input is not supported in this browser. Use Chrome or Edge.', 'info');
+                return;
+            }
+            if (isRecording) {
+                recognition.stop();
+            } else {
+                userInput.value = '';
+                userInput.dispatchEvent(new Event('input'));
+                recognition.start();
+                isRecording = true;
+                micBtn.classList.add('recording');
+                micBtn.title = 'Stop recording';
+                showToast('Listening... speak now', 'info');
+            }
+        };
+
+        // ─── Image Input ──────────────────────────────────────────────────────────
+        let attachedImageFile = null;
+        const imageFile = document.getElementById('imageFile');
+        const imagePreviewStrip = document.getElementById('imagePreviewStrip');
+        const imagePreviewImg = document.getElementById('imagePreviewImg');
+        const imageRemoveBtn = document.getElementById('imageRemoveBtn');
+
+        document.getElementById('imageUploadBtn').onclick = () => {
+            if (isStreaming) return;
+            if (!currentSessionId) {
+                showToast('Upload a PDF first before attaching an image.', 'info');
+                return;
+            }
+            imageFile.click();
+        };
+
+        imageFile.addEventListener('change', () => {
+            const file = imageFile.files[0];
+            if (!file) return;
+            attachedImageFile = file;
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                imagePreviewImg.src = e.target.result;
+                imagePreviewStrip.style.display = 'flex';
+            };
+            reader.readAsDataURL(file);
+            if (!isStreaming) sendBtn.disabled = false;
+            imageFile.value = '';
+        });
+
+        imageRemoveBtn.onclick = () => {
+            attachedImageFile = null;
+            imagePreviewImg.src = '';
+            imagePreviewStrip.style.display = 'none';
+            if (!isStreaming) sendBtn.disabled = !userInput.value.trim();
+        };
+
+        // ─── Send logic routing ───────────────────────────────────────────────────
+        function smartSend() {
+            if (isStreaming) {
+                stopGeneration();
+                return;
+            }
+            if (attachedImageFile) sendMessageWithImage();
+            else sendMessage();
+        }
+
+        // ─── Send message ─────────────────────────────────────────────────────────
+        async function sendMessage() {
+            const text = userInput.value.trim();
+            if (!text) return;
+
+            if (!currentSessionId) {
+                showToast('Upload a PDF first!', 'info');
+                return;
+            }
+
+            suggestionsRow.style.display = 'none';
+            userInput.value = '';
+            userInput.style.height = 'auto';
+
+            toggleUI(true);
+            stopTyping = false;
+            abortController = new AbortController();
+
+            addMessage('user', text);
+            const botTextBox = addMessage('bot', '', true);
+
+            try {
+                const fd = new FormData();
+                fd.append('question', text);
+                fd.append('session_id', currentSessionId);
+
+                const resp = await fetch('/', {
+                    method: 'POST',
+                    body: fd,
+                    signal: abortController.signal
+                });
+                const data = await resp.json();
+
+                if (resp.ok) {
+                    const bubble = botTextBox.closest('.bubble-col');
+                    await typeWriter(botTextBox, data.answer || 'No answer found.');
+
+                    if (!stopTyping) {
+                        if (data.pages?.length) {
+                            const cites = document.createElement('div');
+                            cites.className = 'citations';
+                            cites.innerHTML = `<span class="cite-label">Sources:</span> ` +
+                                data.pages.map(p => `<span class="cite-tag">Page ${p}</span>`).join('');
+                            bubble.appendChild(cites);
+                        }
+
+                        if (data.images?.length) {
+                            const imgWrap = document.createElement('div');
+                            imgWrap.className = 'message-images';
+                            data.images.forEach(url => {
+                                const img = document.createElement('img');
+                                img.src = url; img.className = 'msg-image'; img.loading = 'lazy';
+                                img.onclick = () => window.open(url, '_blank');
+                                imgWrap.appendChild(img);
+                            });
+                            bubble.appendChild(imgWrap);
+                        }
+                        if (data.suggestions?.length) setSuggestions(data.suggestions);
+                    }
+                } else {
+                    botTextBox.innerHTML = marked.parse(`**Error**: ${data.error || 'Unknown error'}`);
+                }
+            } catch (err) {
+                if (err.name === 'AbortError') {
+                    botTextBox.innerHTML += ' *(Stopped)*';
+                } else {
+                    botTextBox.innerHTML = marked.parse('**Error**: Could not reach the server.');
+                    console.error(err);
+                }
+            } finally {
+                toggleUI(false);
+                if (suggestionsChips.children.length) suggestionsRow.style.display = 'block';
+                chatContainer.scrollTop = chatContainer.scrollHeight;
+            }
+        }
+
+        async function sendMessageWithImage() {
+            const text = userInput.value.trim();
+            if (!text && !attachedImageFile) return;
+
+            if (!currentSessionId) {
+                showToast('Upload a PDF first!', 'info');
+                return;
+            }
+
+            suggestionsRow.style.display = 'none';
+            userInput.value = '';
+            userInput.style.height = 'auto';
+
+            toggleUI(true);
+            stopTyping = false;
+            abortController = new AbortController();
+
+            const previewURL = imagePreviewImg.src;
+            addMessageWithImage('user', text, previewURL);
+            const botTextBox = addMessage('bot', '', true);
+
+            const imgToSend = attachedImageFile;
+            attachedImageFile = null;
+            imagePreviewImg.src = '';
+            imagePreviewStrip.style.display = 'none';
+
+            try {
+                const fd = new FormData();
+                fd.append('session_id', currentSessionId);
+                fd.append('question', text);
+                fd.append('image', imgToSend);
+
+                const resp = await fetch('/ask_with_image', {
+                    method: 'POST',
+                    body: fd,
+                    signal: abortController.signal
+                });
+                const data = await resp.json();
+
+                if (resp.ok) {
+                    const bubble = botTextBox.closest('.bubble-col');
+                    await typeWriter(botTextBox, data.answer || 'No answer found.');
+
+                    if (!stopTyping) {
+                        if (data.pages?.length) {
+                            const cites = document.createElement('div');
+                            cites.className = 'citations';
+                            cites.innerHTML = `<span class="cite-label">Sources:</span> ` +
+                                data.pages.map(p => `<span class="cite-tag">Page ${p}</span>`).join('');
+                            bubble.appendChild(cites);
+                        }
+
+                        if (data.images?.length) {
+                            const imgWrap = document.createElement('div');
+                            imgWrap.className = 'message-images';
+                            data.images.forEach(url => {
+                                const img = document.createElement('img');
+                                img.src = url; img.className = 'msg-image'; img.loading = 'lazy';
+                                img.onclick = () => window.open(url, '_blank');
+                                imgWrap.appendChild(img);
+                            });
+                            bubble.appendChild(imgWrap);
+                        }
+                        if (data.suggestions?.length) setSuggestions(data.suggestions);
+                    }
+                } else {
+                    botTextBox.innerHTML = marked.parse(`**Error:** ${data.error || 'Unknown error'}`);
+                }
+            } catch (err) {
+                if (err.name === 'AbortError') {
+                    botTextBox.innerHTML += ' *(Stopped)*';
+                } else {
+                    botTextBox.innerHTML = marked.parse('**Network error.** Please try again.');
+                }
+            } finally {
+                toggleUI(false);
+                chatContainer.scrollTop = chatContainer.scrollHeight;
+            }
+        }
+
+        // ─── Suggestions toggle ───────────────────────────────────────────────────
+        let suggestionsOpen = true;
+        document.getElementById('suggestionsToggle').onclick = () => {
+            suggestionsOpen = !suggestionsOpen;
+            const chips = document.getElementById('suggestionsChips');
+            const icon = document.getElementById('suggToggleIcon');
+            const btn = document.getElementById('suggestionsToggle');
+            chips.classList.toggle('collapsed', !suggestionsOpen);
+            icon.style.transform = suggestionsOpen ? 'rotate(0deg)' : 'rotate(-90deg)';
+            btn.title = suggestionsOpen ? 'Collapse suggestions' : 'Expand suggestions';
+            btn.setAttribute('aria-expanded', suggestionsOpen);
+        };
+
+        // ─── History delegation ───────────────────────────────────────────────────
+        historyList.addEventListener('click', (e) => {
+            if (isStreaming) return;
+            const deleteBtn = e.target.closest('.delete-btn');
+            const renameBtn = e.target.closest('.rename-btn');
+            const item = e.target.closest('.history-item');
+
+            if (deleteBtn) {
+                e.stopPropagation();
+                deleteSession(parseInt(deleteBtn.dataset.sessionId, 10));
+                return;
+            }
+            if (renameBtn) {
+                e.stopPropagation();
+                const sid = parseInt(renameBtn.dataset.sessionId, 10);
+                const title = document.getElementById(`session-${sid}`)?.dataset.title || '';
+                openRenameModal(sid, title);
+                return;
+            }
+            if (item) {
+                loadSession(parseInt(item.dataset.id, 10), item.dataset.title);
+            }
+        });
+
+        // ─── Toast ────────────────────────────────────────────────────────────────
+        function showToast(msg, type = 'info') {
+            const t = document.getElementById('toast');
+            t.textContent = msg;
+            t.className = `toast toast-${type} show`;
+            clearTimeout(t._t);
+            t._t = setTimeout(() => t.classList.remove('show'), 3200);
+        }
+
+        // ─── Upload Status ────────────────────────────────────────────────────────
+        async function showStatus(text, sub = '', type = 'loading') {
+            const overlay = document.getElementById('statusOverlay');
+            const spinner = document.getElementById('statusSpinner');
+            const success = document.getElementById('statusSuccessIcon');
+            const statusTx = document.getElementById('statusText');
+            const statusSb = document.getElementById('statusSub');
+            const progressWrap = document.getElementById('statusProgress');
+            const progressText = document.getElementById('statusProgressText');
+
+            overlay.classList.add('active');
+            statusTx.textContent = text;
+            statusSb.textContent = sub;
+            if (type === 'loading') {
+                progressWrap.style.display = uploadProgressInterval ? 'block' : 'none';
+                progressText.textContent = uploadProgressInterval ? `${Math.round(uploadProgressValue)}%` : '';
+            } else {
+                progressWrap.style.display = 'none';
+                progressText.textContent = '';
+            }
+
+            if (type === 'success') {
+                spinner.style.display = 'none';
+                success.style.display = 'flex';
+                await new Promise(r => setTimeout(r, 1600));
+                overlay.classList.remove('active');
+            } else {
+                spinner.style.display = 'block';
+                success.style.display = 'none';
+            }
+        }
+
+        function hideStatus() {
+            document.getElementById('statusOverlay').classList.remove('active');
+        }
+
+        function startFakeProgress() {
+            const progressBar = document.getElementById('statusProgressBar');
+            const progressText = document.getElementById('statusProgressText');
+            if (uploadProgressInterval) clearInterval(uploadProgressInterval);
+            uploadProgressValue = 0;
+            uploadProgressInterval = setInterval(() => {
+                if (uploadProgressValue >= 90) {
+                    clearInterval(uploadProgressInterval);
+                    return;
+                }
+                uploadProgressValue += Math.random() * 5;
+                if (progressBar) progressBar.style.width = `${uploadProgressValue}%`;
+                if (progressText) progressText.textContent = `${Math.round(uploadProgressValue)}%`;
+            }, 500);
+        }
+
+        function finishFakeProgress() {
+            if (uploadProgressInterval) clearInterval(uploadProgressInterval);
+            const progressBar = document.getElementById('statusProgressBar');
+            const progressText = document.getElementById('statusProgressText');
+            if (progressBar) progressBar.style.width = '100%';
+            if (progressText) progressText.textContent = '100%';
+        }
+
+        function resetFakeProgress() {
+            if (uploadProgressInterval) clearInterval(uploadProgressInterval);
+            uploadProgressInterval = null;
+            uploadProgressValue = 0;
+        }
+
+        // ─── Upload PDF ───────────────────────────────────────────────────────────
+        async function uploadPDF() {
+            if (!pdfFile.files[0]) return;
+            const file = pdfFile.files[0];
+            const fd = new FormData();
+            fd.append('pdf', file);
+
+            await showStatus('Uploading PDF…', file.name);
+
+            try {
+                const data = await new Promise((resolve, reject) => {
+                    const xhr = new XMLHttpRequest();
+                    xhr.open('POST', '/');
+                    xhr.upload.onprogress = (e) => {
+                        if (e.lengthComputable) {
+                            const percent = (e.loaded / e.total) * 100;
+                            const progressBar = document.getElementById('statusProgressBar');
+                            const progressText = document.getElementById('statusProgressText');
+                            if (progressBar) progressBar.style.width = percent + '%';
+                            if (progressText) progressText.textContent = `${Math.round(percent)}%`;
+                        }
+                    };
+                    xhr.onload = () => {
+                        if (xhr.status >= 200 && xhr.status < 300) resolve(JSON.parse(xhr.responseText));
+                        else reject(new Error('Upload failed'));
+                    };
+                    xhr.onerror = () => reject(new Error('Network error during upload.'));
+                    xhr.send(fd);
+                });
+
+                const sessionId = data.session_id;
+                resetFakeProgress();
+                startFakeProgress();
+
+                let isReady = false;
+                while (!isReady) {
+                    const statusResp = await fetch(`/process_status/${sessionId}`);
+                    const statusData = await statusResp.json();
+
+                    if (statusData.status === 'ready') {
+                        isReady = true;
+                        finishFakeProgress();
+                        await showStatus('Ready!', `${statusData.stats.pages} pages`, 'success');
+                        currentSessionId = sessionId;
+                        localStorage.setItem('lastSessionId', sessionId);
+                        localStorage.setItem('lastSessionTitle', statusData.filename);
+                        activeFile.textContent = '· ' + statusData.filename;
+                        headerActions.style.display = 'flex';
+                        addHistoryItem(sessionId, statusData.filename, true);
+                        showChat();
+                        chatContainer.innerHTML = '';
+                        addMessage('bot', `**${statusData.filename}** is ready. Ask me anything!`);
+                        setSuggestions(statusData.suggestions);
+                    } else if (statusData.status === 'error') {
+                        throw new Error(statusData.message || 'Processing failed');
+                    } else {
+                        await showStatus('Extracting & Indexing…', statusData.message || 'This may take a moment');
+                        await new Promise(r => setTimeout(r, 1000));
+                    }
+                }
+            } catch (err) {
+                hideStatus();
+                showToast(err.message, 'error');
+            } finally {
+                pdfFile.value = '';
+            }
+        }
+
+        // ─── Show / hide chat vs empty state ─────────────────────────────────────
+        function showChat() {
+            emptyState.style.display = 'none';
+            chatContainer.style.display = 'flex';
+        }
+
+        function showEmpty() {
+            emptyState.style.display = 'flex';
+            chatContainer.style.display = 'none';
+            suggestionsRow.style.display = 'none';
+        }
+
+        // ─── Suggestions ─────────────────────────────────────────────────────────
+        function setSuggestions(list) {
+            if (!list || !list.length) { suggestionsRow.style.display = 'none'; return; }
+            suggestionsChips.innerHTML = '';
+            list.forEach(q => {
+                const chip = document.createElement('button');
+                chip.className = 'suggestion-chip';
+                chip.textContent = q;
+                chip.onclick = () => {
+                    userInput.value = q;
+                    userInput.dispatchEvent(new Event('input'));
+                    smartSend();
+                };
+                suggestionsChips.appendChild(chip);
+            });
+            suggestionsRow.style.display = 'block';
+        }
+
+        // ─── History item ─────────────────────────────────────────────────────────
+        function addHistoryItem(id, title, active = false) {
+            if (active) document.querySelectorAll('.history-item').forEach(i => i.classList.remove('active'));
+            const existing = document.getElementById(`session-${id}`);
+            if (existing) existing.remove();
+
+            const item = document.createElement('div');
+            item.className = `history-item${active ? ' active' : ''}`;
+            item.id = `session-${id}`;
+            item.dataset.id = id;
+            item.dataset.title = title;
+            item.innerHTML = `
+                <svg style="width:13px;height:13px;opacity:0.5;flex-shrink:0" viewBox="0 0 24 24"><path d="M14 2H6c-1.1 0-1.99.9-1.99 2L4 20c0 1.1.89 2 1.99 2H18c1.1 0 2-.9 2-2V8l-6-6zm2 16H8v-2h8v2zm0-4H8v-2h8v2zm-3-5V3.5L18.5 9H13z"/></svg>
+                <span class="history-title" title="${title}">${title}</span>
+                <div class="history-actions">
+                    <button class="icon-btn rename-btn" data-session-id="${id}" title="Rename">
+                        <svg style="width:12px;height:12px;fill:currentColor" viewBox="0 0 24 24"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a1 1 0 0 0 0-1.41l-2.34-2.34a1 1 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>
+                    </button>
+                    <button class="icon-btn delete-btn" data-session-id="${id}" title="Delete">
+                        <svg style="width:12px;height:12px;fill:currentColor" viewBox="0 0 24 24"><path d="M19 4h-3.5l-1-1h-5l-1 1H5v2h14V4zM6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12z"/></svg>
+                    </button>
+                </div>`;
+            historyList.prepend(item);
+        }
+
+        // ─── Load session ─────────────────────────────────────────────────────────
+        async function loadSession(id, title) {
+            if (isStreaming) return;
+            currentSessionId = id;
+            localStorage.setItem('lastSessionId', id);
+            localStorage.setItem('lastSessionTitle', title);
+            activeFile.textContent = '· ' + title;
+            headerActions.style.display = 'flex';
+            document.querySelectorAll('.history-item').forEach(i => i.classList.remove('active'));
+            const el = document.getElementById(`session-${id}`);
+            if (el) el.classList.add('active');
+            showChat();
+            chatContainer.innerHTML = '<div class="loading-session">Loading...</div>';
+
+            try {
+                const [msgRes, infoRes] = await Promise.all([
+                    fetch(`/get_messages/${id}`),
+                    fetch(`/session_info/${id}`)
+                ]);
+                const msgData = await msgRes.json();
+                const infoData = await infoRes.json();
+                chatContainer.innerHTML = '';
+                if (msgData.messages?.length) {
+                    msgData.messages.forEach(m => addMessage(m.sender, m.content, false, m.metadata?.pages, m.metadata?.images));
+                }
+                setSuggestions(infoData.suggestions || []);
+            } catch (err) {
+                showToast('Failed to load session.', 'error');
+            }
+        }
+
+        // ─── Modals ───────────────────────────────────────────────────────────────
+        function showConfirm() {
+            return new Promise((resolve) => {
+                const overlay = document.getElementById('confirmOverlay');
+                const okBtn = document.getElementById('confirmOk');
+                const canBtn = document.getElementById('confirmCancel');
+                overlay.classList.add('active');
+                const cleanup = (r) => {
+                    overlay.classList.remove('active');
+                    okBtn.onclick = null; canBtn.onclick = null;
+                    resolve(r);
+                };
+                okBtn.onclick = () => cleanup(true);
+                canBtn.onclick = () => cleanup(false);
+            });
+        }
+
+        function openRenameModal(id, currentTitle) {
+            const overlay = document.getElementById('renameOverlay');
+            const input = document.getElementById('renameInput');
+            const okBtn = document.getElementById('renameOk');
+            const canBtn = document.getElementById('renameCancel');
+            input.value = currentTitle;
+            overlay.classList.add('active');
+            okBtn.onclick = async () => {
+                const newTitle = input.value.trim();
+                if (!newTitle) return;
+                overlay.classList.remove('active');
+                const fd = new FormData(); fd.append('session_id', id); fd.append('title', newTitle);
+                await fetch('/rename_session', { method: 'POST', body: fd });
+                const el = document.getElementById(`session-${id}`);
+                if (el) el.querySelector('.history-title').textContent = newTitle;
+                if (currentSessionId == id) activeFile.textContent = '· ' + newTitle;
+            };
+            canBtn.onclick = () => overlay.classList.remove('active');
+        }
+
+        async function deleteSession(id) {
+            if (!await showConfirm()) return;
+            const fd = new FormData(); fd.append('session_id', id);
+            await fetch('/delete_session', { method: 'POST', body: fd });
+            document.getElementById(`session-${id}`)?.remove();
+            if (currentSessionId == id) {
+                localStorage.removeItem('lastSessionId');
+                localStorage.removeItem('lastSessionTitle');
+                newChat();
+            }
+        }
+
+        // ─── Messages ─────────────────────────────────────────────────────────────
+        function addMessage(sender, text, isTyping = false, pages = [], images = []) {
+            const wrapper = document.createElement('div');
+            wrapper.className = `message-wrapper ${sender}-wrapper`;
+            const content = document.createElement('div');
+            content.className = 'message-content';
+            const avatar = document.createElement('div');
+            avatar.className = `avatar ${sender}-avatar`;
+            avatar.textContent = sender === 'user' ? 'U' : 'AI';
+            const bubble = document.createElement('div');
+            bubble.className = 'bubble-col';
+            const textBox = document.createElement('div');
+            textBox.className = 'text';
+
+            if (isTyping) textBox.innerHTML = '<span class="typing-dots"><span></span><span></span><span></span></span>';
+            else {
+                textBox.innerHTML = marked.parse(text || '');
+                textBox.querySelectorAll('pre code').forEach(b => hljs.highlightElement(b));
+            }
+            bubble.appendChild(textBox);
+
+            if (pages?.length) {
+                const cites = document.createElement('div');
+                cites.className = 'citations';
+                cites.innerHTML = `<span class="cite-label">Sources:</span> ` + pages.map(p => `<span class="cite-tag">Page ${p}</span>`).join('');
+                bubble.appendChild(cites);
+            }
+
+            if (images?.length) {
+                const imgWrap = document.createElement('div');
+                imgWrap.className = 'message-images';
+                images.forEach(url => {
+                    const img = document.createElement('img');
+                    img.src = url; img.className = 'msg-image'; img.loading = 'lazy';
+                    img.onclick = () => window.open(url, '_blank');
+                    imgWrap.appendChild(img);
+                });
+                bubble.appendChild(imgWrap);
+            }
+
+            content.appendChild(avatar); content.appendChild(bubble);
+            wrapper.appendChild(content); chatContainer.appendChild(wrapper);
+            chatContainer.scrollTop = chatContainer.scrollHeight;
+            return textBox;
+        }
+
+        function addMessageWithImage(sender, text, imgUrl) {
+            const wrapper = document.createElement('div');
+            wrapper.className = `message-wrapper ${sender}-wrapper`;
+            const content = document.createElement('div');
+            content.className = 'message-content';
+            const avatar = document.createElement('div');
+            avatar.className = `avatar ${sender}-avatar`;
+            avatar.textContent = sender === 'user' ? 'U' : 'AI';
+            const bubble = document.createElement('div');
+            bubble.className = 'bubble-col';
+
+            if (text) {
+                const textBox = document.createElement('div');
+                textBox.className = 'text'; textBox.innerHTML = marked.parse(text);
+                bubble.appendChild(textBox);
+            }
+            const imgWrap = document.createElement('div');
+            imgWrap.className = 'message-images';
+            const img = document.createElement('img');
+            img.src = imgUrl; img.className = 'msg-image';
+            img.onclick = () => window.open(imgUrl, '_blank');
+            imgWrap.appendChild(img);
+            bubble.appendChild(imgWrap);
+
+            content.appendChild(avatar); content.appendChild(bubble);
+            wrapper.appendChild(content); chatContainer.appendChild(wrapper);
+            chatContainer.scrollTop = chatContainer.scrollHeight;
+        }
+
+        // ─── Typewriter ───────────────────────────────────────────────────────────
+        async function typeWriter(element, text) {
+            const tokens = text.split(' ');
+            let cur = '';
+            for (let i = 0; i < tokens.length; i += 2) {
+                if (stopTyping) break;
+                cur += (tokens[i] || '') + ' ' + (tokens[i + 1] || '') + ' ';
+                element.innerHTML = marked.parse(cur.trim());
+                if (i + 2 >= tokens.length || cur.includes('```')) {
+                    element.querySelectorAll('pre code').forEach(b => {
+                        if (!b.classList.contains('hljs')) hljs.highlightElement(b);
+                    });
+                }
+                chatContainer.scrollTop = chatContainer.scrollHeight;
+                await new Promise(r => setTimeout(r, 12));
+            }
+        }
+
+        function newChat() {
+            currentSessionId = null;
+            window.currentSessionId = null;
+            localStorage.removeItem('lastSessionId');
+            localStorage.removeItem('lastSessionTitle');
+            activeFile.textContent = '';
+            headerActions.style.display = 'none';
+            document.querySelectorAll('.history-item').forEach(i => i.classList.remove('active'));
+            showEmpty();
+        }
+
+        // ─── Initialization ───────────────────────────────────────────────────────
+        (function init() {
+            const lastId = localStorage.getItem('lastSessionId');
+            const lastTitle = localStorage.getItem('lastSessionTitle');
+            if (lastId && lastTitle) {
+                loadSession(parseInt(lastId), lastTitle);
+            } else {
+                showEmpty();
+            }
+        })();
+    </script>
+    <script src="{{ url_for('static', filename='features.js') }}"></script>
+</body>
+
+</html>
